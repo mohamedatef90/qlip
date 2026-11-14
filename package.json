@@ -13,6 +13,7 @@
     "test:routing": "node --test tests/link-routing.test.mjs tests/ai-category.test.mjs",
     "test:ownership": "node --test tests/ownership.test.mjs",
     "test:net": "node --test tests/net.test.mjs",
+    "test:io": "./scripts/test-background-io.sh",
     "test:edge": "deno test --no-lock --node-modules-dir=none --allow-env --allow-read --allow-net tests/mcp-ownership.deno.test.ts tests/rss-poller.deno.test.ts"
   },
   "dependencies": {

@@ -384,7 +384,8 @@ async function processJobs(): Promise<{ processed: number; failed: number }> {
   let processed = 0;
   let failed = 0;
 
-  await db.rpc('reclaim_stuck_jobs');
+  // Stuck jobs are reclaimed by the `refvault-reclaim-stuck-jobs` cron job (every 10 minutes),
+  // not on every tick: the worker is only invoked when a job is due.
 
   const geminiKey = await getSecret(db, 'GEMINI_API_KEY');
   // Enrichment provider is pluggable (Vault LLM_PROVIDER); embeddings/TTS stay Gemini.
