@@ -15,6 +15,11 @@
 -- Apply this migration BEFORE deploying the matching `job-worker` change.
 -- Rollback SQL is in the pull request description.
 
+-- Fail fast instead of queueing behind a lock or running long on a small database.
+-- SET LOCAL only takes effect inside a transaction, so apply this file in one (BEGIN ... COMMIT).
+set local lock_timeout = '5s';
+set local statement_timeout = '120s';
+
 -- 1. Indexes ---------------------------------------------------------------------
 -- reclaim_stuck_jobs() looks up the newest job per stuck item (`where item_id = ?
 -- order by id desc limit 1`); today that walks jobs_pkey and filters on item_id
