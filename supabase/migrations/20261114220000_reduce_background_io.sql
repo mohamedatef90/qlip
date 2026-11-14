@@ -10,7 +10,7 @@
 --   2. only invokes `job-worker` when a job is actually due (a cheap indexed check);
 --   3. runs `reclaim_stuck_jobs()` from its own cron job every 10 minutes
 --      (the worker no longer calls it on every tick);
---   4. prunes the cron and pg_net log tables daily.
+--   4. prunes the cron and pg_net log tables daily, in bounded batches.
 --
 -- Apply this migration BEFORE deploying the matching `job-worker` change.
 -- Rollback SQL is in the pull request description.
@@ -63,19 +63,40 @@ select cron.schedule(
   'select public.reclaim_stuck_jobs();'
 );
 
--- 4. Daily prune of the log tables -------------------------------------------------
-create or replace function public.prune_background_logs()
-returns void
+-- 4. Daily prune of the log tables (bounded) --------------------------------------
+-- Deletes at most `batch_size` rows per table per run, so it can never turn into one huge
+-- statement on a small database. Steady-state volume is a few hundred rows a day; the
+-- existing backlog is cleared once, in small batches, by scripts/prune-background-logs-once.sh.
+create or replace function public.prune_background_logs(batch_size int default 10000)
+returns int
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  n_cron int;
+  n_net int;
 begin
-  delete from cron.job_run_details where end_time < now() - interval '3 days';
-  delete from net._http_response where created < now() - interval '1 day';
+  with d as (
+    delete from cron.job_run_details
+    where ctid in (
+      select ctid from cron.job_run_details where end_time < now() - interval '3 days' limit batch_size
+    )
+    returning 1
+  ) select count(*) into n_cron from d;
+
+  with d as (
+    delete from net._http_response
+    where ctid in (
+      select ctid from net._http_response where created < now() - interval '1 day' limit batch_size
+    )
+    returning 1
+  ) select count(*) into n_net from d;
+
+  return n_cron + n_net;
 end;
 $$;
-revoke all on function public.prune_background_logs() from public, anon, authenticated;
+revoke all on function public.prune_background_logs(int) from public, anon, authenticated;
 
 select cron.schedule(
   'refvault-prune-background-logs',

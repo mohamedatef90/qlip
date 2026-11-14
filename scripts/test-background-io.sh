@@ -84,6 +84,15 @@ SQL
 check "job_run_details: rows older than 3 days removed, newer and in-flight kept" "select count(*)=2 from cron.job_run_details"
 check "job_run_details: the in-flight row (no end_time) survives" "select count(*)=1 from cron.job_run_details where end_time is null"
 check "net._http_response: older than 1 day removed, recent kept" "select count(*)=1 and min(body)='recent' from net._http_response"
+psql -X -q "$DB" <<'SQL'
+-- batch limit: 25 old rows with a batch size of 10 are removed 10 at a time
+insert into cron.job_run_details (jobid, start_time, end_time, status)
+  select 1, now()-interval '20 days', now()-interval '20 days', 'succeeded' from generate_series(1,25);
+create temp table prune_counts (n int);
+insert into prune_counts select public.prune_background_logs(10);
+insert into prune_counts select public.prune_background_logs(10);
+SQL
+check "batch limit: each run removes at most batch_size rows (25 old rows, batch 10 -> 10 then 10, 5 left)" "select (select count(*) from cron.job_run_details where end_time < now() - interval '3 days')=5"
 echo "--- indexes"
 check "jobs(item_id) index exists" "select count(*)=1 from pg_indexes where indexname='jobs_item_id_idx'"
 check "running-jobs partial index exists" "select count(*)=1 from pg_indexes where indexname='jobs_running_locked_idx' and indexdef like '%WHERE (status = ''running''%'"
