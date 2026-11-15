@@ -200,7 +200,7 @@ private struct QlipTabShell: View {
     // AppStorage (not State): switching appearance rebuilds the whole tree via
     // .id(appearance) in QlipApp, and plain @State would reset to the Vault tab
     // mid-Settings. Persisting the selection keeps the user where they were.
-    @AppStorage("qlip-selected-tab") private var selectedTab = 0
+    @AppStorage("qlip-selected-tab-v2") private var selectedTab = 0
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -212,13 +212,9 @@ private struct QlipTabShell: View {
                 .tabItem { Label("Library", systemImage: "books.vertical.fill") }
                 .tag(1)
 
-            FeedsView()
-                .tabItem { Label("Feeds", systemImage: "dot.radiowaves.left.and.right") }
-                .tag(2)
-
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
-                .tag(3)
+                .tag(2)
         }
         .sheet(isPresented: $showingSave) { SaveLinkView() }
     }
@@ -231,7 +227,7 @@ private struct VaultView: View {
     @State private var navigationPath = NavigationPath()
     @State private var showingSignOutConfirmation = false
     @State private var showingVaultLayout = false
-    @AppStorage("qlip-selected-tab") private var selectedTab = 0
+    @AppStorage("qlip-selected-tab-v2") private var selectedTab = 0
     @AppStorage(VaultSectionPreferences.orderKey) private var vaultSectionOrder = ""
     @AppStorage(VaultSectionPreferences.hiddenKey) private var hiddenVaultSections = ""
 
@@ -380,7 +376,7 @@ private struct VaultView: View {
                         showingVaultLayout = true
                     }
                     Button("Settings", systemImage: "gearshape") {
-                        selectedTab = 3
+                        selectedTab = 2
                     }
                     Button("Sync now", systemImage: "arrow.triangle.2.circlepath") {
                         Task { await store.refresh(showSuccessNotice: true) }
@@ -510,7 +506,7 @@ private enum VaultSectionID: String, CaseIterable, Identifiable, Hashable {
         case .dailyPicks: "Worth another look"
         case .fromPhone: "Captured in the Qlip app"
         case .recentlyBookmarked: "Websites ready when you need them"
-        case .freshLibrary: "Articles, video, feeds and social"
+        case .freshLibrary: "Articles, video and social"
         }
     }
 
@@ -1111,326 +1107,6 @@ private struct LibraryEmptyState: View {
     }
 }
 
-private struct FeedsView: View {
-    @EnvironmentObject private var store: QlipStore
-    @State private var query = ""
-    @State private var selectedTopics: Set<String> = []
-    @State private var showingAddFeed = false
-    @State private var navigationPath = NavigationPath()
-
-    private var topics: [String] {
-        Array(Set(store.items
-            .filter { $0.sourceType == "rss" }
-            .compactMap(\.topic)
-            .filter { !$0.isEmpty }))
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
-    private var items: [ContentItem] {
-        store.items.filter {
-            guard $0.sourceType == "rss" else { return false }
-            let matchesTopic = selectedTopics.isEmpty || ($0.topic.map(selectedTopics.contains) ?? false)
-            let matchesQuery = query.isEmpty || [$0.displayTitle, $0.displaySummary, $0.topic]
-                .compactMap { $0 }
-                .joined(separator: " ")
-                .localizedCaseInsensitiveContains(query)
-            return matchesTopic && matchesQuery
-        }
-    }
-
-    var body: some View {
-        NavigationStack(path: $navigationPath) {
-            ZStack {
-                QlipBackdrop()
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("Feeds")
-                                .font(.largeTitle.weight(.bold))
-                                .foregroundStyle(QlipTheme.foreground)
-                            Spacer()
-                            Button { showingAddFeed = true } label: {
-                                Image(systemName: "plus")
-                                    .font(.headline.bold())
-                                    .foregroundStyle(QlipTheme.background)
-                                    .frame(width: 42, height: 42)
-                                    .background(QlipTheme.primary, in: Circle())
-                            }
-                            .accessibilityLabel("Add a feed")
-                        }
-                        Text("Fresh ideas from the sources you follow.")
-                            .font(.subheadline)
-                            .foregroundStyle(QlipTheme.foregroundMuted)
-
-                        Text("Sources")
-                            .font(.headline)
-                            .foregroundStyle(QlipTheme.foreground)
-                            .padding(.top, 6)
-                        if store.feedSubscriptions.isEmpty {
-                            VStack(spacing: 10) {
-                                Image(systemName: "dot.radiowaves.left.and.right")
-                                    .font(.title2)
-                                    .foregroundStyle(QlipTheme.primary)
-                                Text("No feed sources yet").font(.headline)
-                                Button("Add your first source") { showingAddFeed = true }
-                                    .font(.subheadline.bold())
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(24)
-                            .foregroundStyle(QlipTheme.foreground)
-                            .qlipCard()
-                        } else {
-                            ForEach(store.feedSubscriptions) { feed in
-                                FeedSourceCard(feed: feed)
-                            }
-                        }
-
-                        QlipSearchField(query: $query, prompt: "Search fresh feed items")
-                        if !topics.isEmpty {
-                            FeedTopicFilterBar(topics: topics, selectedTopics: $selectedTopics)
-                        }
-                        if items.isEmpty {
-                            LibraryEmptyState(
-                                title: selectedTopics.isEmpty ? "No feed posts yet" : "No posts in these topics",
-                                message: selectedTopics.isEmpty
-                                    ? "Add a source or pull to refresh after a source syncs."
-                                    : "Choose another topic or show all topics to see more posts.",
-                                icon: "dot.radiowaves.left.and.right"
-                            )
-                        } else {
-                            Text("Fresh from your feeds")
-                                .font(.headline)
-                                .foregroundStyle(QlipTheme.foreground)
-                            ForEach(items) { item in
-                                ContentItemLink(item: item) { navigationPath.append($0.id) }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, QlipTheme.horizontalPadding)
-                    .padding(.top, 18)
-                    .padding(.bottom, QlipTheme.tabBarClearance)
-                }
-                .refreshable { await store.refresh() }
-            }
-            .navigationDestination(for: UUID.self) { ReaderDestination(itemID: $0) }
-            .sheet(isPresented: $showingAddFeed) { AddFeedSheet() }
-        }
-    }
-}
-
-private struct FeedTopicFilterBar: View {
-    let topics: [String]
-    @Binding var selectedTopics: Set<String>
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text("Topics")
-                    .font(.headline)
-                    .foregroundStyle(QlipTheme.foreground)
-                Spacer()
-                if !selectedTopics.isEmpty {
-                    Button("Clear") { selectedTopics.removeAll() }
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(QlipTheme.primary)
-                        .frame(minHeight: 44)
-                        .accessibilityLabel("Clear topic filters")
-                }
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    FeedTopicFilterPill(
-                        title: "All topics",
-                        isSelected: selectedTopics.isEmpty
-                    ) {
-                        selectedTopics.removeAll()
-                    }
-                    ForEach(topics, id: \.self) { topic in
-                        FeedTopicFilterPill(
-                            title: topic,
-                            isSelected: selectedTopics.contains(topic)
-                        ) {
-                            if selectedTopics.contains(topic) {
-                                selectedTopics.remove(topic)
-                            } else {
-                                selectedTopics.insert(topic)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Feed topic filters")
-    }
-}
-
-private struct FeedTopicFilterPill: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.caption.bold())
-                }
-                Text(title)
-                    .font(.footnote.weight(.semibold))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(isSelected ? QlipTheme.background : QlipTheme.foreground)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 44)
-            .background(
-                isSelected ? QlipTheme.primary : QlipTheme.surfaceRaised,
-                in: Capsule()
-            )
-            .overlay {
-                Capsule().stroke(
-                    isSelected ? QlipTheme.primary : QlipTheme.border,
-                    lineWidth: 1
-                )
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-    }
-}
-
-private struct FeedSourceCard: View {
-    @EnvironmentObject private var store: QlipStore
-    let feed: RSSSubscription
-    @State private var isSyncing = false
-    @State private var isUpdating = false
-    @State private var showingDeleteConfirmation = false
-
-    private var isPerformingAction: Bool { isSyncing || isUpdating }
-
-    var body: some View {
-        HStack(spacing: 13) {
-            AsyncImage(url: feed.faviconURL) { image in
-                image.resizable().scaledToFit()
-            } placeholder: {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .foregroundStyle(QlipTheme.primary)
-            }
-            .frame(width: 34, height: 34)
-            .padding(6)
-            .background(QlipTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(feed.displayTitle)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(QlipTheme.foreground)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Circle().fill(feed.isActive ? QlipTheme.success : QlipTheme.foregroundMuted).frame(width: 6, height: 6)
-                    Text(feed.isActive ? "Active" : "Paused")
-                    if let date = feed.lastFetchedAt { Text("· \(date, format: .relative(presentation: .named))") }
-                }
-                .font(.caption)
-                .foregroundStyle(QlipTheme.foregroundMuted)
-                if let error = feed.lastError, !error.isEmpty {
-                    Text(error).font(.caption2).foregroundStyle(QlipTheme.destructive).lineLimit(1)
-                }
-            }
-            Spacer()
-            Menu {
-                Button {
-                    isSyncing = true
-                    Task { await store.syncFeed(feed); isSyncing = false }
-                } label: {
-                    Label(isSyncing ? "Syncing…" : "Sync now", systemImage: "arrow.clockwise")
-                }
-                .disabled(isPerformingAction)
-                Button {
-                    isUpdating = true
-                    Task { await store.setFeedActive(feed, isActive: !feed.isActive); isUpdating = false }
-                } label: {
-                    Label(feed.isActive ? "Pause" : "Resume", systemImage: feed.isActive ? "pause" : "play")
-                }
-                .disabled(isPerformingAction)
-                Button(role: .destructive) { showingDeleteConfirmation = true } label: {
-                    Label("Remove source", systemImage: "trash")
-                }
-                .disabled(isPerformingAction)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundStyle(QlipTheme.foregroundMuted)
-            }
-        }
-        .padding(15)
-        .qlipCard(radius: QlipTheme.controlRadius)
-        .alert("Remove feed source?", isPresented: $showingDeleteConfirmation) {
-            Button("Remove", role: .destructive) { Task { await store.deleteFeed(feed) } }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Existing items stay in your vault. Qlip will stop fetching new posts from this source.")
-        }
-    }
-}
-
-private struct AddFeedSheet: View {
-    @EnvironmentObject private var store: QlipStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var url = ""
-    @State private var busy = false
-
-    private var urlIssue: String? {
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        guard let value = URL(string: trimmed), ["http", "https"].contains(value.scheme?.lowercased()) else {
-            return "Enter a full website address beginning with http:// or https://."
-        }
-        return nil
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Website or feed URL") {
-                    TextField("https://example.com", text: $url)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .textContentType(.URL)
-                    if let urlIssue {
-                        Label(urlIssue, systemImage: "exclamationmark.circle.fill")
-                            .foregroundStyle(QlipTheme.destructive)
-                            .font(.footnote)
-                    }
-                }
-                Section {
-                    Text("Qlip discovers RSS/Atom automatically, syncs it now, then checks for new posts every 30 minutes.")
-                        .foregroundStyle(QlipTheme.foregroundMuted)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(QlipTheme.background)
-            .navigationTitle("Add feed source")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(busy ? "Adding…" : "Add") {
-                        busy = true
-                        Task {
-                            if await store.addFeed(urlText: url) { dismiss() }
-                            busy = false
-                        }
-                    }
-                    .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || urlIssue != nil || busy)
-                }
-            }
-        }
-        .presentationDetents([.medium])
-        .presentationBackground(QlipTheme.background)
-    }
-}
-
 private struct SettingsView: View {
     @EnvironmentObject private var store: QlipStore
     @AppStorage("qlip-appearance") private var appearance = QlipAppearance.default.rawValue
@@ -1501,14 +1177,6 @@ private struct SettingsView: View {
                                 .foregroundStyle(QlipTheme.foregroundMuted)
                             settingsLink("Manage categories", icon: "folder.badge.gearshape") {
                                 FolderSettingsView()
-                            }
-                        }
-
-                        settingsCard("Feed sources", icon: "dot.radiowaves.left.and.right") {
-                            Text("\(store.feedSubscriptions.count) RSS/Atom source\(store.feedSubscriptions.count == 1 ? "" : "s")")
-                                .foregroundStyle(QlipTheme.foregroundMuted)
-                            settingsLink("Manage feed sources", icon: "dot.radiowaves.left.and.right") {
-                                FeedSourcesSettingsView()
                             }
                         }
 
@@ -1917,41 +1585,6 @@ private struct APIKeySettingsView: View {
     }
 }
 
-private struct FeedSourcesSettingsView: View {
-    @EnvironmentObject private var store: QlipStore
-    @State private var showingAddFeed = false
-
-    var body: some View {
-        ZStack {
-            QlipBackdrop()
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    if store.feedSubscriptions.isEmpty {
-                        LibraryEmptyState(
-                            title: "No feed sources yet",
-                            message: "Use the + button to add a website or RSS feed for Qlip to follow.",
-                            icon: "dot.radiowaves.left.and.right"
-                        )
-                    } else {
-                        ForEach(store.feedSubscriptions) { feed in FeedSourceCard(feed: feed) }
-                    }
-                }
-                .padding(QlipTheme.horizontalPadding)
-            }
-        }
-        .navigationTitle("Feed sources")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showingAddFeed = true } label: { Image(systemName: "plus") }
-                    .accessibilityLabel("Add a feed source")
-            }
-        }
-        .sheet(isPresented: $showingAddFeed) { AddFeedSheet() }
-    }
-}
-
 private struct PendingAPIKeyAction: Identifiable {
     enum Kind: Equatable { case revoke, delete }
     let id = UUID()
@@ -2070,7 +1703,6 @@ private struct VaultCard: View {
         case "youtube", "reel": "play.rectangle.fill"
         case "pdf": "doc.fill"
         case "tweet", "reddit": "bubble.left.and.text.bubble.right.fill"
-        case "rss": "dot.radiowaves.left.and.right"
         default: "bookmark.fill"
         }
     }

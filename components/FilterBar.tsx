@@ -9,7 +9,7 @@ interface FilterBarProps {
   onSaveAsSmartCollection: (name: string) => void;
 }
 
-const SOURCE_TYPES: SourceType[] = ['article', 'youtube', 'reel', 'tweet', 'pdf', 'rss', 'reddit', 'podcast', 'other'];
+const SOURCE_TYPES: SourceType[] = ['article', 'youtube', 'reel', 'tweet', 'pdf', 'reddit', 'podcast', 'other'];
 const READ_STATUSES: NonNullable<FilterState['read_status']> = ['unread', 'reading', 'read'];
 const SORTS: { value: NonNullable<FilterState['sort']>; label: string }[] = [
   { value: 'date_desc', label: 'Newest' },

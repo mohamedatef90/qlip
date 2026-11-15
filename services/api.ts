@@ -2,7 +2,7 @@
 // Replaces the old hybrid localStorage/Supabase `db` object.
 
 import { supabase } from './supabase';
-import { ContentItem, Link, Category, Folder, SmartCollection, FilterState, RssSubscription, FeedCandidate, ApiKey, SaveDestination } from '../types';
+import { ContentItem, Link, Category, Folder, SmartCollection, FilterState, ApiKey, SaveDestination } from '../types';
 
 const ITEM_COLUMNS =
   'id, url, title, description, summary, key_points, tags, topic, content_type_label, source_type, item_kind, status, saved_via, ' +
@@ -19,7 +19,6 @@ export interface HomeStats {
   unread: number;
   thisWeek: number;
   library: number;
-  feeds: number;
   processing: number;
 }
 
@@ -99,28 +98,26 @@ export const api = {
         rows().eq('item_kind', 'content').eq('read_status', 'reading')
           .not('saved_via', 'in', '(mobile,extension)').limit(6),
         rows().in('saved_via', ['mobile', 'extension']).limit(8),
-        rows().eq('source_type', 'rss').limit(8),
         rows().eq('is_pinned', true).limit(1000),
         rows().in('status', processing).limit(50),
         count().eq('item_kind', 'bookmark'),
         count().eq('item_kind', 'bookmark').eq('read_status', 'unread'),
         count().eq('item_kind', 'bookmark').gte('created_at', new Date(Date.now() - 7 * 86_400_000).toISOString()),
         count().eq('item_kind', 'content'),
-        count().eq('source_type', 'rss'),
         count().in('status', processing),
       ]);
       const error = results.find(result => result.error)?.error;
       if (error) throw new Error(`Failed to load home: ${error.message}`);
       const byId = new Map<string, ContentItem>();
-      for (const result of results.slice(0, 7)) {
+      for (const result of results.slice(0, 6)) {
         for (const item of (result.data ?? []) as unknown as ContentItem[]) byId.set(item.id, item);
       }
       return {
         items: [...byId.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id)),
         stats: {
-          total: results[7].count ?? 0, unread: results[8].count ?? 0,
-          thisWeek: results[9].count ?? 0, library: results[10].count ?? 0,
-          feeds: results[11].count ?? 0, processing: results[12].count ?? 0,
+          total: results[6].count ?? 0, unread: results[7].count ?? 0,
+          thisWeek: results[8].count ?? 0, library: results[9].count ?? 0,
+          processing: results[10].count ?? 0,
         },
       };
     },
@@ -344,14 +341,13 @@ export const api = {
       return () => { supabase.removeChannel(channel); };
     },
 
-    /** Changes to folders, assignments, feeds, and daily picks affect several
+    /** Changes to folders, assignments, and daily picks affect several
      * derived screens, so the consumer performs one coalesced vault refresh. */
     subscribeToStructureChanges(onChange: () => void) {
       const channel = supabase
         .channel('vault-structure-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'folders' }, onChange)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'item_folders' }, onChange)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'rss_subscriptions' }, onChange)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_picks' }, onChange)
         .subscribe();
       return () => { supabase.removeChannel(channel); };
@@ -442,81 +438,6 @@ export const api = {
     async delete(id: string) {
       const { error } = await supabase.from('smart_collections').delete().eq('id', id);
       if (error) throw new Error(`Delete smart collection failed: ${error.message}`);
-    },
-  },
-
-  feeds: {
-    async list(): Promise<RssSubscription[]> {
-      const { data, error } = await supabase
-        .from('rss_subscriptions')
-        .select('id, feed_url, site_url, title, favicon_url, last_fetched_at, last_error, error_count, is_active, created_at')
-        .order('created_at', { ascending: false });
-      if (error) throw new Error(`Failed to load feeds: ${error.message}`);
-      return (data ?? []) as RssSubscription[];
-    },
-
-    /** Discover/validate feeds for a URL via the discover-feed Edge Function. */
-    async discover(url: string): Promise<FeedCandidate[]> {
-      const data = await invokeFn<{ candidates: FeedCandidate[] }>('discover-feed', { url });
-      return data.candidates ?? [];
-    },
-
-    /** Insert a validated candidate. The poller fills title/site/favicon on first fetch. */
-    async subscribe(candidate: FeedCandidate): Promise<RssSubscription> {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not signed in');
-      let domain = '';
-      try { domain = new URL(candidate.feed_url).hostname; } catch { /* keep empty */ }
-      const { data, error } = await supabase
-        .from('rss_subscriptions')
-        .insert({
-          user_id: user.id,
-          feed_url: candidate.feed_url,
-          title: candidate.title,
-          favicon_url: domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : null,
-        })
-        .select('id, feed_url, site_url, title, favicon_url, last_fetched_at, last_error, error_count, is_active, created_at')
-        .single();
-      if (error) {
-        if (error.code === '23505') throw new Error('Already subscribed to this feed.');
-        throw new Error(`Subscribe failed: ${error.message}`);
-      }
-      return data as RssSubscription;
-    },
-
-    /** Force-poll one subscription right now (first fetch after subscribing / manual sync). */
-    async syncNow(id: string): Promise<{ inserted: number; skipped: boolean }> {
-      return await invokeFn('rss-poller', { subscription_id: id });
-    },
-
-    /** Feed items ingested in the last 48h (the FeedsView "fresh" stream). */
-    async recentItems(): Promise<ContentItem[]> {
-      const since = new Date(Date.now() - 48 * 3600_000).toISOString();
-      const { data, error } = await supabase
-        .from('content_items')
-        .select(ITEM_COLUMNS)
-        .eq('source_type', 'rss')
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      if (error) throw new Error(`Failed to load feed items: ${error.message}`);
-      return (data ?? []) as unknown as ContentItem[];
-    },
-
-    async setActive(id: string, isActive: boolean) {
-      const updates: Record<string, unknown> = { is_active: isActive };
-      if (isActive) {
-        updates.error_count = 0;
-        updates.last_error = null;
-      }
-      const { error } = await supabase.from('rss_subscriptions').update(updates).eq('id', id);
-      if (error) throw new Error(`Update feed failed: ${error.message}`);
-    },
-
-    /** Items already ingested from the feed stay in the vault. */
-    async unsubscribe(id: string) {
-      const { error } = await supabase.from('rss_subscriptions').delete().eq('id', id);
-      if (error) throw new Error(`Unsubscribe failed: ${error.message}`);
     },
   },
 

@@ -145,20 +145,6 @@ const TOOLS = [
     },
   },
   {
-    name: 'list_feeds',
-    description: 'List the RSS/Atom feed subscriptions.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'subscribe_feed',
-    description: 'Subscribe to an RSS/Atom feed URL. New posts are pulled and enriched automatically.',
-    inputSchema: {
-      type: 'object',
-      required: ['url'],
-      properties: { url: { type: 'string' } },
-    },
-  },
-  {
     name: 'get_daily_picks',
     description: "Get today's resurfaced picks — items you read more than two weeks ago.",
     inputSchema: { type: 'object', properties: {} },
@@ -394,35 +380,6 @@ export const HANDLERS: Record<string, Handler> = {
       .single();
     if (error) throw new Error(error.message);
     return data;
-  },
-
-  async list_feeds(db, userId) {
-    const { data, error } = await db
-      .from('rss_subscriptions')
-      .select('id, feed_url, site_url, title, last_fetched_at, is_active, error_count')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return { feeds: data ?? [] };
-  },
-
-  async subscribe_feed(db, userId, args) {
-    const url = str(args.url);
-    if (!url) throw new Error('`url` is required.');
-    const check = validatePublicUrl(url);
-    if (!check.ok) throw new Error(check.reason);
-    let domain = '';
-    try { domain = new URL(url).hostname; } catch { /* keep empty */ }
-    const { data, error } = await db
-      .from('rss_subscriptions')
-      .insert({ user_id: userId, feed_url: url, favicon_url: domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : null })
-      .select('id, feed_url, is_active')
-      .single();
-    if (error) {
-      if (error.code === '23505') throw new Error('Already subscribed to this feed.');
-      throw new Error(error.message);
-    }
-    return { ...data, note: 'The poller validates and fills feed details on the next run (within ~30 min).' };
   },
 
   async get_daily_picks(db, userId) {

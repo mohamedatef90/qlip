@@ -19,9 +19,8 @@ import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 const SettingsView = lazy(() => import('./components/SettingsView'));
 const LibraryView = lazy(() => import('./views/LibraryView'));
 const ReaderView = lazy(() => import('./views/ReaderView'));
-const FeedsView = lazy(() => import('./views/FeedsView'));
 
-/** Compact relative time for feed rows: 5m, 3h, 2d. */
+/** Compact relative time for list rows: 5m, 3h, 2d. */
 const timeAgo = (ts: number): string => {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
   if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`;
@@ -503,7 +502,7 @@ const App: React.FC = () => {
 
   // Vault Hub is the home for BOOKMARKS — plain website links you saved to
   // reference. Articles, social posts and videos are "content" and live in the
-  // Library; RSS lives in /feeds. `item_kind` is computed server-side.
+  // Library. `item_kind` is computed server-side.
   // Origin never changes destination: a domain saved on iPhone is still a
   // Bookmark and may also appear in the From your phone section.
   const vaultLinks = useMemo<Link[]>(
@@ -514,11 +513,6 @@ const App: React.FC = () => {
   // Readable/watchable content — the Library's material. Surfaced on the home
   // only as bridges (continue reading, latest) that deep-link into /library.
   const libraryLinks = useMemo<Link[]>(() => links.filter(l => l.kind === 'content'), [links]);
-
-  const feedLinks = useMemo<Link[]>(
-    () => links.filter(l => l.sourceType === 'rss').slice(0, 8),
-    [links]
-  );
 
   // Everything saved from the native app or its share extension gets its own
   // home section and opens Qlip's reader when enriched content is available.
@@ -557,7 +551,7 @@ const App: React.FC = () => {
   // Search results grouped into source sections (Articles, Videos, Reels, …).
   const SOURCE_LABELS: Record<string, string> = {
     article: 'Articles', youtube: 'Videos', reel: 'Reels', tweet: 'Posts',
-    reddit: 'Reddit', pdf: 'PDFs', rss: 'Feeds', podcast: 'Podcasts', other: 'Other',
+    reddit: 'Reddit', pdf: 'PDFs', podcast: 'Podcasts', other: 'Other',
     bookmark: 'Bookmarks',
   };
   const searchGroups = useMemo(() => {
@@ -566,7 +560,7 @@ const App: React.FC = () => {
       const key = link.kind === 'bookmark' ? 'bookmark' : (link.sourceType ?? 'other');
       (by.get(key) ?? by.set(key, []).get(key)!).push(link);
     }
-    const order = ['article','youtube','reel','tweet','reddit','pdf','podcast','rss','other','bookmark'];
+    const order = ['article','youtube','reel','tweet','reddit','pdf','podcast','other','bookmark'];
     return [...by.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
   }, [searchMatches]);
 
@@ -602,7 +596,6 @@ const App: React.FC = () => {
     unread: vaultLinks.filter(l => (l.readStatus ?? 'unread') === 'unread').length,
     thisWeek: vaultLinks.filter(l => Date.now() - l.createdAt < 7 * 86_400_000).length,
     library: libraryLinks.length,
-    feeds: links.filter(l => l.sourceType === 'rss').length,
     processing: processingLinks.length,
   }), [homeStats, links, vaultLinks, libraryLinks, processingLinks]);
 
@@ -824,18 +817,14 @@ const App: React.FC = () => {
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <span className="eyebrow">AI Pipeline</span>
-                      <p className="text-[10px] font-bold text-zinc-600 mt-1">New captures and feed intelligence</p>
+                      <p className="text-[10px] font-bold text-zinc-600 mt-1">New captures</p>
                     </div>
                     {stats.processing > 0 ? (
                       <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border" style={{ color: 'var(--lime)', borderColor: 'rgba(168,207,56,.3)', background: 'rgba(168,207,56,.08)' }}>
                         <i className="fa-solid fa-spinner fa-spin text-[10px]"></i>
                         {stats.processing} processing
                       </span>
-                    ) : (
-                      <NavLink to="/feeds" className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">
-                        Manage feeds <i className="fa-solid fa-arrow-right ml-1"></i>
-                      </NavLink>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex-grow overflow-y-auto no-scrollbar space-y-3 max-h-[430px]">
                     {processingLinks.length > 0 && (
@@ -847,7 +836,7 @@ const App: React.FC = () => {
                         {processingLinks.slice(0, 4).map(link => (
                         <div key={`pipe-${link.id}`} className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
                           <div className="w-8 h-8 rounded-lg border border-white/[0.08] bg-[#0A1320] grid place-items-center shrink-0">
-                            <i className={`fa-solid ${link.sourceType === 'rss' ? 'fa-rss' : 'fa-sparkles'} text-xs`} style={{ color: 'var(--lime)' }}></i>
+                            <i className={`fa-solid fa-sparkles text-xs`} style={{ color: 'var(--lime)' }}></i>
                           </div>
                           <div className="min-w-0 flex-grow">
                             <p className="text-[11px] font-bold text-zinc-300 truncate">{link.title}</p>
@@ -857,43 +846,17 @@ const App: React.FC = () => {
                                 return <span key={stage} className="h-1 flex-1 rounded-full" style={{ background: index <= current ? 'var(--lime)' : 'rgba(255,255,255,.08)', opacity: index < current ? .55 : 1 }} />;
                               })}
                             </div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">{link.status === 'pending' ? 'Queued' : link.status === 'parsing' ? 'Reading content' : 'AI analysis'} · {link.sourceType === 'rss' ? 'Feed' : 'Capture'}</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">{link.status === 'pending' ? 'Queued' : link.status === 'parsing' ? 'Reading content' : 'AI analysis'} · Capture</p>
                           </div>
                           <i className="fa-solid fa-spinner fa-spin text-[10px] shrink-0" style={{ color: 'var(--lime)' }}></i>
                         </div>
                         ))}
                       </>
                     )}
-                    {feedLinks.length > 0 && (
-                      <>
-                        <div className="flex items-center justify-between px-1 pt-2">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Fresh from feeds</span>
-                          <NavLink to="/feeds" className="text-[9px] font-black uppercase tracking-widest hover:text-white transition-colors" style={{ color: 'var(--lime)' }}>View all</NavLink>
-                        </div>
-                        {feedLinks.slice(0, processingLinks.length > 0 ? 4 : 7).map(link => (
-                        <NavLink key={`feed-${link.id}`} to={`/item/${link.id}`} className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl hover:bg-white/[0.05] hover:border-white/10 transition-all group/feed">
-                          <div className="w-8 h-8 rounded-lg bg-[#0A1320] border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
-                            <img
-                              src={link.favicon || `https://www.google.com/s2/favicons?sz=64&domain=${link.url}`}
-                              alt=""
-                              className="w-4 h-4 object-contain"
-                              onError={(e) => (e.currentTarget.style.display = 'none')}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-grow">
-                            <p className="text-xs font-bold text-zinc-300 line-clamp-2 leading-snug group-hover/feed:text-white transition-colors">{link.title}</p>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-600 truncate mt-0.5">{timeAgo(link.createdAt)} ago · {link.summary ? 'AI ready' : 'captured'}</p>
-                          </div>
-                          <i className="fa-solid fa-circle-check text-[10px] text-emerald-500/70 shrink-0"></i>
-                        </NavLink>
-                        ))}
-                      </>
-                    )}
-                    {processingLinks.length === 0 && feedLinks.length === 0 && (
+                    {processingLinks.length === 0 && (
                       <div className="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-40">
-                        <i className="fa-solid fa-rss text-2xl text-zinc-600"></i>
-                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">No feed items yet</p>
-                        <NavLink to="/feeds" className="text-[10px] font-black uppercase tracking-widest transition-colors" style={{ color: 'var(--lime)' }}>Subscribe to a feed →</NavLink>
+                        <i className="fa-solid fa-sparkles text-2xl text-zinc-600"></i>
+                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Nothing processing</p>
                       </div>
                     )}
                   </div>
@@ -1181,7 +1144,6 @@ const App: React.FC = () => {
           <Route path="/library" element={<LibraryLayout folders={folders} smartCollections={smartCollections} onDeleteSmartCollection={handleDeleteSmartCollection}>{renderLibrary('library')}</LibraryLayout>} />
           <Route path="/folder/:folderId" element={<LibraryLayout folders={folders} smartCollections={smartCollections} onDeleteSmartCollection={handleDeleteSmartCollection}>{renderLibrary('folder')}</LibraryLayout>} />
           <Route path="/collection/:collectionId" element={<LibraryLayout folders={folders} smartCollections={smartCollections} onDeleteSmartCollection={handleDeleteSmartCollection}>{renderLibrary('collection')}</LibraryLayout>} />
-          <Route path="/feeds" element={<LibraryLayout folders={folders} smartCollections={smartCollections} onDeleteSmartCollection={handleDeleteSmartCollection}><FeedsView /></LibraryLayout>} />
           <Route path="/item/:id" element={<ReaderView />} />
           <Route path="/settings" element={<SettingsView categories={categories} currentTheme={theme} onThemeChange={setTheme} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={confirmDeleteCategory} onReorderCategories={handleReorderCategories} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -1191,11 +1153,10 @@ const App: React.FC = () => {
 
       {/* Mobile bottom navigation — the pill nav above is desktop-only */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0A1320]/85 backdrop-blur-xl border-t border-white/[0.06]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-3">
           {([
             { to: '/', end: true, icon: 'fa-vault', label: 'Vault' },
             { to: '/library', end: false, icon: 'fa-book-open', label: 'Library' },
-            { to: '/feeds', end: false, icon: 'fa-rss', label: 'Feeds' },
             { to: '/settings', end: false, icon: 'fa-sliders', label: 'Settings' },
           ] as const).map(item => (
             <NavLink
