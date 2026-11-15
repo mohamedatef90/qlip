@@ -117,7 +117,7 @@ Deno.serve(async (req: Request) => {
 
   const db = serviceClient();
 
-  // Cron cleanup path (anon Bearer + worker secret, like job-worker/rss-poller).
+  // Cron cleanup path (anon Bearer + worker secret, like job-worker).
   const expected = await getSecret(db, 'WORKER_SECRET');
   if (expected && req.headers.get('x-worker-secret') === expected) {
     try {

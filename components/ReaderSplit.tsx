@@ -21,7 +21,7 @@ const timeAgo = (iso: string): string => {
 
 const SOURCE_LABEL: Record<string, string> = {
   article: 'Article', youtube: 'YouTube', reel: 'Reel', tweet: 'Tweet',
-  pdf: 'PDF', rss: 'RSS', reddit: 'Reddit', podcast: 'Podcast', other: 'Link',
+  pdf: 'PDF', reddit: 'Reddit', podcast: 'Podcast', other: 'Link',
 };
 
 const READ_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' } as const;

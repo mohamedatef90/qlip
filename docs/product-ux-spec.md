@@ -55,13 +55,6 @@ Qlip
 │   ├── Folders
 │   ├── Tags
 │   └── Manage folders
-├── Feeds
-│   ├── Add feed
-│   ├── Feed list
-│   ├── Sync feed
-│   ├── Pause/resume feed
-│   ├── Unsubscribe
-│   └── Fresh from your feeds
 ├── Settings
 │   ├── Account
 │   ├── Cloud sync status
@@ -73,12 +66,11 @@ Qlip
 └── Reader
 ```
 
-Persistent navigation is the four-tab bottom bar:
+Persistent navigation is the three-tab bottom bar:
 
 1. Vault — the home dashboard and rediscovery surface.
 2. Library — the complete collection and filtering surface.
-3. Feeds — RSS/Atom subscriptions and incoming feed content.
-4. Settings — account, sync, folders, and sign-out.
+3. Settings — account, sync, folders, and sign-out.
 
 The `+` action is available on Vault and Library. Add Link, Item Detail, and
 Reader open as focused full-screen experiences.
@@ -132,8 +124,7 @@ Remember the item?
 ├── Saved from phone → Library > Mobile
 ├── Plain link → Library > Bookmarks
 ├── Readable media → Library > Reading
-├── Organized manually → Library > Folder
-└── Came from subscription → Feeds
+└── Organized manually → Library > Folder
 ```
 
 ### Read and act on an item
@@ -199,7 +190,7 @@ UX rules:
 
 ### Link card
 
-Use one consistent card component across Vault, Library, folders, and feeds.
+Use one consistent card component across Vault, Library, and folders.
 
 Card anatomy:
 
@@ -290,22 +281,6 @@ Structure:
 
 Reader should be calm and readable: larger text, generous line height, strong
 contrast, and fewer controls than Item Detail.
-
-### Feeds
-
-Purpose: turn recurring sources into a lightweight reading stream.
-
-Actions:
-
-- add a feed URL or discover candidate feeds;
-- choose a candidate when multiple feeds are found;
-- sync now;
-- pause/resume;
-- unsubscribe;
-- browse newly saved feed items.
-
-Unsubscribe confirmation should state that existing saved items remain in the
-vault.
 
 ### Settings
 
@@ -405,7 +380,6 @@ Examples:
 - Mobile empty: `Nothing from your phone yet` + share-sheet instructions.
 - Bookmarks empty: `No bookmarks yet` + `Add Link`.
 - Reading empty: `No reading yet` + explanation that articles/videos/posts go here.
-- Feed error: `Couldn’t refresh this feed` + `Try again`.
 - AI failure: `We saved the link, but couldn’t organize it yet` + `Retry AI`.
 
 ## 8. Accessibility and trust requirements
@@ -439,7 +413,6 @@ Examples:
 
 ### P2 — improve retention
 
-- feed discovery and fresh-content digest;
 - reminders for unread saved content;
 - bulk select/archive/delete;
 - export and import;
@@ -455,7 +428,6 @@ Examples:
 | Vault dashboard and search | `lib/presentation/screens/vault_hub_screen.dart` |
 | Collection modes and filters | `lib/presentation/screens/library_screen.dart` |
 | Save flow | `lib/presentation/screens/add_link_screen.dart` |
-| Feed subscriptions | `lib/presentation/screens/feeds_screen.dart` |
 | Item detail and actions | `lib/presentation/screens/link_detail_screen.dart` |
 | Reading and Arabic translation | `lib/presentation/screens/reader_screen.dart` |
 | Folder management | `lib/presentation/screens/manage_folders_screen.dart` |

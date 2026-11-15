@@ -113,10 +113,6 @@ const FolderSidebar: React.FC<FolderSidebarProps> = ({ folders, smartCollections
             <span className="truncate">{c.name}</span>
           </NavLink>
         ))}
-        <NavLink to="/feeds" className={navLinkClass}>
-          <i className="fa-solid fa-rss text-[10px]"></i>
-          <span>Feeds</span>
-        </NavLink>
       </div>
 
       <div className="space-y-3">

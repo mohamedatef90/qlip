@@ -1,19 +1,19 @@
 export type ItemStatus = 'pending' | 'parsing' | 'enriching' | 'ready' | 'degraded' | 'failed';
 
 export type SourceType =
-  | 'article' | 'youtube' | 'reel' | 'tweet' | 'pdf' | 'rss' | 'reddit' | 'podcast' | 'other';
+  | 'article' | 'youtube' | 'reel' | 'tweet' | 'pdf' | 'reddit' | 'podcast' | 'other';
 
 /**
  * The two conceptual buckets a saved link falls into:
  *   'bookmark' — a plain website link with no readable body (lives in Vault Hub)
- *   'content'  — an article / social post / video / pdf / feed (lives in Library)
+ *   'content'  — an article / social post / video / pdf (lives in Library)
  * Computed server-side as a generated column on content_items.
  */
 export type ItemKind = 'bookmark' | 'content';
 export type SaveDestination = 'auto' | ItemKind;
 
-/** Which client saved the item (web app, Qlip mobile, extension, bulk import, RSS poller). */
-export type SavedVia = 'web' | 'mobile' | 'extension' | 'import' | 'rss' | 'mcp';
+/** Which client saved the item (web app, Qlip mobile, extension, bulk import, MCP). */
+export type SavedVia = 'web' | 'mobile' | 'extension' | 'import' | 'mcp';
 
 /** A personal API key for the MCP server (agents read/write the vault). */
 export interface ApiKey {
@@ -93,28 +93,6 @@ export interface FilterState {
   sort?: 'date_desc' | 'date_asc' | 'title_asc';
   /** Present only on seeded system collections; not user-editable. */
   system?: string;
-}
-
-/** Row shape of the rss_subscriptions table. */
-export interface RssSubscription {
-  id: string;
-  feed_url: string;
-  site_url: string | null;
-  title: string | null;
-  favicon_url: string | null;
-  last_fetched_at: string | null;
-  last_error: string | null;
-  error_count: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-/** Feed candidate returned by the discover-feed Edge Function. */
-export interface FeedCandidate {
-  title: string | null;
-  feed_url: string;
-  /** true when the function fetched and parsed the feed itself. */
-  validated: boolean;
 }
 
 /** UI card shape (adapter over ContentItem, kept for existing components). */

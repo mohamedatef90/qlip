@@ -6,7 +6,6 @@ import Supabase
 final class QlipStore: ObservableObject {
     @Published private(set) var items: [ContentItem] = []
     @Published private(set) var folders: [QlipFolder] = []
-    @Published private(set) var feedSubscriptions: [RSSSubscription] = []
     @Published private(set) var dailyPickIDs: Set<UUID> = []
     @Published private(set) var apiKeys: [QlipAPIKey] = []
     @Published private(set) var isAuthenticated = false
@@ -38,7 +37,6 @@ final class QlipStore: ObservableObject {
     private let listColumns = "id,url,title,description,author,summary,key_points,tags,topic,content_type_label,source_type,item_kind,saved_via,status,site_name,thumbnail_url,favicon_url,read_status,is_starred,is_pinned,pin_position,published_at,created_at,word_count,duration_seconds,item_folders(folder_id,assignment_source)"
     private let detailColumns = "id,url,title,description,author,summary,key_points,tags,topic,content_type_label,source_type,item_kind,saved_via,status,site_name,thumbnail_url,favicon_url,read_status,is_starred,is_pinned,pin_position,published_at,created_at,word_count,duration_seconds,item_folders(folder_id,assignment_source),content_text"
     private let folderColumns = "id,name,color,icon,parent_id,position"
-    private let feedColumns = "id,feed_url,site_url,title,favicon_url,last_fetched_at,last_error,error_count,is_active,created_at"
     private let apiKeyColumns = "id,name,key_prefix,created_at,last_used_at,revoked_at"
 
     init() {
@@ -259,7 +257,6 @@ final class QlipStore: ObservableObject {
         try? await client.auth.signOut()
         items = []
         folders = []
-        feedSubscriptions = []
         dailyPickIDs = []
         apiKeys = []
         cache.clear()
@@ -290,12 +287,6 @@ final class QlipStore: ObservableObject {
                     .order("position", ascending: true)
                     .execute()
                     .value
-                async let feedsRequest: [RSSSubscription] = client
-                    .from("rss_subscriptions")
-                    .select(feedColumns)
-                    .order("created_at", ascending: false)
-                    .execute()
-                    .value
                 async let picksRequest: [QlipDailyPick] = client
                     .from("daily_picks")
                     .select("item_id")
@@ -308,12 +299,11 @@ final class QlipStore: ObservableObject {
                     .execute()
                     .value
 
-                let (refreshed, refreshedFolders, refreshedFeeds, refreshedPicks, refreshedKeys) = try await (
-                    itemsRequest, foldersRequest, feedsRequest, picksRequest, apiKeysRequest
+                let (refreshed, refreshedFolders, refreshedPicks, refreshedKeys) = try await (
+                    itemsRequest, foldersRequest, picksRequest, apiKeysRequest
                 )
                 items = refreshed
                 folders = refreshedFolders
-                feedSubscriptions = refreshedFeeds
                 dailyPickIDs = Set(refreshedPicks.map(\.itemID))
                 apiKeys = refreshedKeys
                 cache.replace(with: refreshed)
@@ -659,88 +649,6 @@ final class QlipStore: ObservableObject {
         }
     }
 
-    func addFeed(urlText: String) async -> Bool {
-        guard let url = normalizedURL(urlText) else {
-            errorMessage = "Enter a valid website or RSS URL."
-            return false
-        }
-        do {
-            let session = try await client.auth.session
-            let functions = AppConfig.functionsClient(accessToken: session.accessToken)
-            let discovered: DiscoverFeedResponse = try await functions.invoke(
-                "discover-feed",
-                options: FunctionInvokeOptions(body: DiscoverFeedRequest(url: url.absoluteString))
-            )
-            guard let candidate = discovered.candidates.first else {
-                errorMessage = "Qlip could not find an RSS or Atom feed at this address."
-                return false
-            }
-            let host = candidate.feedURL.host() ?? ""
-            let favicon = host.isEmpty ? nil : URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=64")
-            let feed: RSSSubscription = try await client
-                .from("rss_subscriptions")
-                .insert(FeedInsert(
-                    userID: session.user.id,
-                    feedURL: candidate.feedURL,
-                    siteURL: url,
-                    title: candidate.title,
-                    faviconURL: favicon
-                ))
-                .select(feedColumns)
-                .single()
-                .execute()
-                .value
-            let _: PollResponse = try await functions.invoke(
-                "rss-poller",
-                options: FunctionInvokeOptions(body: SubscriptionRequest(subscriptionID: feed.id))
-            )
-            await refresh()
-            showNotice("Feed added and syncing now.")
-            return true
-        } catch {
-            errorMessage = "Could not add the feed: \(error.localizedDescription)"
-            return false
-        }
-    }
-
-    func setFeedActive(_ feed: RSSSubscription, isActive: Bool) async {
-        do {
-            try await client.from("rss_subscriptions")
-                .update(FeedActiveUpdate(isActive: isActive))
-                .eq("id", value: feed.id)
-                .execute()
-            await refresh()
-            showNotice(isActive ? "Feed turned on." : "Feed paused.")
-        } catch {
-            errorMessage = "Could not update the feed: \(error.localizedDescription)"
-        }
-    }
-
-    func syncFeed(_ feed: RSSSubscription) async {
-        do {
-            let session = try await client.auth.session
-            let functions = AppConfig.functionsClient(accessToken: session.accessToken)
-            let _: PollResponse = try await functions.invoke(
-                "rss-poller",
-                options: FunctionInvokeOptions(body: SubscriptionRequest(subscriptionID: feed.id))
-            )
-            await refresh()
-            showNotice("Feed sync complete.")
-        } catch {
-            errorMessage = "Could not sync the feed: \(error.localizedDescription)"
-        }
-    }
-
-    func deleteFeed(_ feed: RSSSubscription) async {
-        do {
-            try await client.from("rss_subscriptions").delete().eq("id", value: feed.id).execute()
-            await refresh()
-            showNotice("Feed removed.")
-        } catch {
-            errorMessage = "Could not remove the feed: \(error.localizedDescription)"
-        }
-    }
-
     func createAPIKey(name: String) async -> String? {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
@@ -864,8 +772,8 @@ final class QlipStore: ObservableObject {
 
         // These tables shape the same vault but do not update a content_items
         // row. Give each its own lifecycle-managed channel so web changes to a
-        // folder, assignment, feed, or daily pick reach the phone immediately.
-        for table in ["folders", "item_folders", "rss_subscriptions", "daily_picks"] {
+        // folder, assignment, or daily pick reach the phone immediately.
+        for table in ["folders", "item_folders", "daily_picks"] {
             let structureChannel = client.channel("qlip-\(table)")
             let structureChanges = structureChannel.postgresChange(
                 AnyAction.self,
@@ -994,40 +902,7 @@ private struct RetryResponse: Decodable {
     let retried: Bool
 }
 
-private struct DiscoverFeedRequest: Encodable { let url: String }
-
-private struct FeedInsert: Encodable {
-    let userID: UUID
-    let feedURL: URL
-    let siteURL: URL?
-    let title: String?
-    let faviconURL: URL?
-
-    enum CodingKeys: String, CodingKey {
-        case title
-        case userID = "user_id"
-        case feedURL = "feed_url"
-        case siteURL = "site_url"
-        case faviconURL = "favicon_url"
-    }
-}
-
-private struct FeedActiveUpdate: Encodable {
-    let isActive: Bool
-    enum CodingKeys: String, CodingKey { case isActive = "is_active" }
-}
-
 private struct APIKeyRevokeUpdate: Encodable {
     let revokedAt: Date
     enum CodingKeys: String, CodingKey { case revokedAt = "revoked_at" }
-}
-
-private struct SubscriptionRequest: Encodable {
-    let subscriptionID: UUID
-    enum CodingKeys: String, CodingKey { case subscriptionID = "subscription_id" }
-}
-
-private struct PollResponse: Decodable {
-    let inserted: Int?
-    let skipped: Bool?
 }

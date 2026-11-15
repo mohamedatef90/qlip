@@ -6,7 +6,7 @@
 
 An **AI knowledge vault** for everything you save. Qlip is the React web app; it shares one Supabase backend with the **Qlip** iOS app, so a link saved on your phone and a link saved on the web land in the same place and go through the same AI pipeline.
 
-Every URL you save is fetched, read, and enriched by AI — a clean title, a summary, key points, a topic, and tags — then made searchable. Plain website links live in the **Vault Hub**; articles, videos, social posts, PDFs, and feeds live in the **Library**.
+Every URL you save is fetched, read, and enriched by AI — a clean title, a summary, key points, a topic, and tags — then made searchable. Plain website links live in the **Vault Hub**; articles, videos, social posts, and PDFs live in the **Library**.
 
 ## Features
 
@@ -14,7 +14,6 @@ Every URL you save is fetched, read, and enriched by AI — a clean title, a sum
 - **Two-tier AI router** — short items go to a fast model (`openai/gpt-oss-20b`), long-form articles/PDFs/transcripts to a frontier reasoner (`z-ai/glm-5.2`), both on NVIDIA's API, with an automatic **Gemini fallback** so nothing ever stalls.
 - **Social & media parsers** — YouTube (captions or AI transcription), X/Twitter, Reddit, PDF, and **Instagram / TikTok / Facebook** via Apify (downloads the clip and transcribes the audio; resolves Facebook `share/…` links).
 - **Hybrid semantic search** — Postgres full-text + pgvector embeddings, merged with RRF.
-- **RSS feeds** — subscribe to feeds, auto-polled every 30 min, only the last 48h ingested; a "Fresh from your feeds" stream with a topic filter.
 - **Reader** — distraction-free reading with a hero image, AI summary, key points, **text-to-speech**, and a one-tap **Translate to Arabic** (RTL).
 - **Resurfacing** — a nightly "Today's Picks" of things you read a while ago.
 - **MCP server** — connect AI agents (Claude, Codex, …) to read and write your vault: create categories, save links & notes, search, and organize. See [MCP server](#mcp-server) below.
@@ -45,7 +44,7 @@ npm run preview    # preview the production build
 
 ## How the pipeline works
 
-`save-item` inserts a `content_items` row + a job → pg_cron invokes the `job-worker` every minute → it parses (per-source-type parser) → enriches (AI) → embeds → the item flips `pending → parsing → enriching → ready`. Clients get live updates via Supabase Realtime. Feeds, TTS, resurfacing, and translation are separate Edge Functions on the same pattern.
+`save-item` inserts a `content_items` row + a job → pg_cron invokes the `job-worker` every minute → it parses (per-source-type parser) → enriches (AI) → embeds → the item flips `pending → parsing → enriching → ready`. Clients get live updates via Supabase Realtime. TTS, resurfacing, and translation are separate Edge Functions on the same pattern.
 
 ## MCP server
 
@@ -57,16 +56,16 @@ claude mcp add --transport http qlip \
   --header "Authorization: Bearer rv_YOUR_KEY"
 ```
 
-Tools: `save_link`, `save_note`, `search`, `list_items`, `get_item`, `update_item`, `delete_item`, `list_folders`, `create_folder`, `list_feeds`, `subscribe_feed`, `get_daily_picks`. Every key is scoped to your account.
+Tools: `save_link`, `save_note`, `search`, `list_items`, `get_item`, `update_item`, `delete_item`, `list_folders`, `create_folder`, `get_daily_picks`. Every key is scoped to your account.
 
 ## Project layout
 
 ```
 components/            React UI (cards, modals, views)
-views/                 LibraryView, ReaderView, FeedsView
+views/                 LibraryView, ReaderView
 services/              api.ts (data layer), supabase.ts
 supabase/functions/    Edge Functions (save-item, job-worker, semantic-search,
-                       rss-poller, discover-feed, tts-generate, translate, mcp)
+                       tts-generate, translate, mcp)
 supabase/migrations/   SQL migrations
 ```
 

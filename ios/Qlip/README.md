@@ -16,7 +16,7 @@ The deployment target is iOS 17 and the Supabase Swift package is pinned in
 7. A best-effort iOS background refresh retries unsent inbox links after the
    app is suspended. Once `save-item` accepts a URL, parsing and AI enrichment
    run on Supabase and continue independently of the phone app.
-8. Database-backed Priority Vault ordering, nightly resurfaced picks, folders/categories, RSS source management and MCP agent-key management stay synchronized with web.
+8. Database-backed Priority Vault ordering, nightly resurfaced picks, folders/categories and MCP agent-key management stay synchronized with web.
 9. Three matching appearance modes, the white Qlip launch identity, social thumbnails and a minimum 1.5-second splash are included in the app and extension.
 
 No AI, service-role or provider secret is present in the app. The only bundled

@@ -45,44 +45,6 @@ struct QlipFolder: Codable, Identifiable, Hashable {
     }
 }
 
-struct RSSSubscription: Codable, Identifiable, Hashable {
-    let id: UUID
-    let feedURL: URL
-    let siteURL: URL?
-    let title: String?
-    let faviconURL: URL?
-    let lastFetchedAt: Date?
-    let lastError: String?
-    let errorCount: Int
-    let isActive: Bool
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id, title
-        case feedURL = "feed_url"
-        case siteURL = "site_url"
-        case faviconURL = "favicon_url"
-        case lastFetchedAt = "last_fetched_at"
-        case lastError = "last_error"
-        case errorCount = "error_count"
-        case isActive = "is_active"
-        case createdAt = "created_at"
-    }
-
-    var displayTitle: String { title?.nilIfEmpty ?? feedURL.host() ?? feedURL.absoluteString }
-}
-
-struct FeedCandidate: Codable, Hashable {
-    let title: String?
-    let feedURL: URL
-    let validated: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case title, validated
-        case feedURL = "feed_url"
-    }
-}
-
 struct QlipDailyPick: Codable, Hashable {
     let itemID: UUID
 
@@ -108,10 +70,6 @@ struct QlipAPIKey: Codable, Identifiable, Hashable {
     }
 
     var isRevoked: Bool { revokedAt != nil }
-}
-
-struct DiscoverFeedResponse: Decodable {
-    let candidates: [FeedCandidate]
 }
 
 enum ProcessingStatus: String, Codable {
